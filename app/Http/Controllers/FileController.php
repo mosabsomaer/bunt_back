@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class FileController extends Controller
 {
@@ -70,7 +71,7 @@ class FileController extends Controller
 
             // Make the GET request to the CloudConvert API
             $response = Http::withHeaders([
-                'Authorization' => 'Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiZTQ5YWJlMjEyOTFmYmQ1NTRjNzIzNWM5YTQ3ZDRkMGQyNDdjZjdhNTdjNDM0Y2Y1OGUyNmVlZDc2ZTk4MjVhNWFiMWFmZTVhZmU4YmE4YWIiLCJpYXQiOjE3MjAyMDIwOTIuOTE2NzI3LCJuYmYiOjE3MjAyMDIwOTIuOTE2NzI5LCJleHAiOjQ4NzU4NzU2OTIuOTEzNjA1LCJzdWIiOiI2NzI4MDMwOSIsInNjb3BlcyI6WyJ1c2VyLnJlYWQiLCJ1c2VyLndyaXRlIiwidGFzay5yZWFkIiwidGFzay53cml0ZSIsIndlYmhvb2sucmVhZCIsIndlYmhvb2sud3JpdGUiLCJwcmVzZXQucmVhZCIsInByZXNldC53cml0ZSJdfQ.cGVM4cETdbGkhO0qjxj6nvLvx_odXtixgyixb6oPQavhEweTqD9yS6hyHoDeDcCzyvqOYURCu024Ke-L22nz_fS1RkjSynOCatYekoGRsGIYTWmiDeXh8jlPI0SVCveRAgDuXNkZmnNERHUbUD82_kTrfp13nrPpOb8z_uuaP-uk-dY5Hv7afgz8rKPa0q0NbFF716-KVmk8DNhprSspP-x3rDrj9VGvJSjKRzfJTk1u5V21OPbAqU3G9YGKifZvLDJMQ-gJEA8U36ab93aE5LLn8z9sfKfFIcSbxWtwczpUgYa-MC_7SKtCBOp3TxkA2dvum-TRX1Sj4fhmlw7oc55TR_-goSUZ2k6uUXrVIa2IXGGxjnFmZwHW5DjXTNykEgG0qh3U3mn6IGhTW5YnEegTVQ4D4zBAltsWkpg0VGEXPiKx2n7YUVt9JiDhQhddtSOb1Q6B7e43lTymtJ7quqz6TRmUvh6hc3T-eW9wSVFHdS8srt3T1G0xr6lUVcBgGzjQNBGxkX82a3_K6MLbmBzq316XRAQYauT3F9yIMa1e4mPOPxqZPI3DVzzKn9YiAcT0yXtqj1cqcy79S2Y_Bzd_KtGPBuOcn1hlGnHtc3AdhyaaNWjIyFFbOwR3psAy63hm_yHZItmYduOU-idFlr4EiEFCKHk_esCL-QM4asw',
+                'Authorization' => 'Bearer ' .  env('CLOUDCONVERT_API_KEY'),
                 'Content-Type' => 'application/json',
             ])->get("https://api.cloudconvert.com/v2/jobs/" . $input['JobID']);
             $cloudConvertResponse = $response->json();
@@ -111,7 +112,7 @@ class FileController extends Controller
             $input['price'] = $price;
             //update number of pages in order table
             $order = Order::where('order_id', $input['order_id'])->first();
-            $order->number_pages+=$PageCount;
+            $order->number_pages += $PageCount;
             $order->save();
             // Create the file record in the database
             File::create($input);
@@ -155,19 +156,19 @@ class FileController extends Controller
             $input = $request->validate([
                 'color_mode' => ['boolean'],
                 'file_name' => ['string'],
-                'JobID' => [ 'string'],
+                'JobID' => ['string'],
                 'copies' => ['integer', 'min:1'],
                 'order_id' => ['string', 'min:6', 'max:6', 'exists:orders,order_id'],
                 'PageCount' => ['integer', 'min:1'],
-                'path'=>['string'],
+                'path' => ['string'],
             ]);
 
             $pricePerPage = $input['color_mode'] ? 1 : 0.5;
-            $price = $pricePerPage * $input['PageCount'] * $input['copies'];
-            $input['price'] = $price;
+            $input['price']  = $pricePerPage * $input['PageCount'] * $input['copies'];
+
             $order = Order::where('order_id', $input['order_id'])->first();
 
-            $order->number_pages+= $input['PageCount']-$file->PageCount;;
+            $order->number_pages += $input['PageCount'] - $file->PageCount;;
             $order->save();
             $file->update($input);
             return response()->json([
@@ -188,17 +189,59 @@ class FileController extends Controller
             $filepath = $file->path;
 
             $hello = Storage::delete($filepath);
-            $order = Order::where('order_id', $file->order_id)->first(); 
+            $order = Order::where('order_id', $file->order_id)->first();
             $order->number_pages -= $file->PageCount;
             $order->save();
             $file->delete();
             return response()->json([
                 'data' => 'File Deleted',
                 'file deleted from folder' => $hello,
-                'file path'=> $filepath
+                'file path' => $filepath
             ]);
         } catch (\Exception $e) {
             return $this->handleError($e);
+        }
+    }
+
+    public function downloadFile(string $id)
+    {
+        try {
+            // Find the Order using order_id
+            $order = Order::where('order_id', $id)->first();
+            if (!$order) {
+                throw new \Exception("Order not found.");
+            }
+
+            // Find the File associated with the Order
+            $file = File::where('order_id', $order->order_id)->first();
+            if (!$file) {
+                throw new \Exception("File not found for the given Order.");
+            }
+
+            $filePath = storage_path('app/' . $file->path);
+
+            // Check if the file exists
+            if (!file_exists($filePath)) {
+                throw new \Exception("File not found at the specified path.");
+            }
+
+            // Return the file for download
+            return response()->download($filePath);
+        } catch (\Exception $e) {
+            $error = [
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'path' => $filePath ?? null
+            ];
+
+            // Log the error for further investigation
+            Log::error($e);
+
+            // Return the error response
+            return response()->json($error, 500);
         }
     }
 }

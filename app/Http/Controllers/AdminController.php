@@ -174,7 +174,9 @@ class AdminController extends Controller
             $admin->update($input);
 
             return response()->json([
-                'data' => 'updated'
+                'data' => 'updated',
+                'input'=> $input,
+                'request'=>$request->request
             ], 200);
         } catch (\Exception $e) {
             return $this->handleError($e);

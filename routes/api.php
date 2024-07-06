@@ -43,4 +43,4 @@ Route::post('/auth/register', [AdminController::class, 'store'])->name('api.admi
 Route::post('/auth/login', [AdminController::class, 'loginAdmin'])->name('api.admins.login');
 Route::post('files', [FileController::class, 'store'])->name('files.store');
 Route::get('createorders', [OrderController::class, 'store'])->name('orders.store');
-Route::get('/downloadfile/{order_id}', [DownloadController::class, 'downloadFile'])->name('file.download'); //you need to put API on this one and make only the printer machine able to access it
+Route::get('/downloadfile/{order_id}', [FileController::class, 'downloadFile'])->name('file.download'); //you need to put API on this one and make only the printer machine able to access it

@@ -43,10 +43,10 @@ Route::post('/auth/register', [AdminController::class, 'store'])->name('api.admi
 Route::post('/auth/login', [AdminController::class, 'loginAdmin'])->name('api.admins.login');
 Route::post('files', [FileController::class, 'store'])->name('files.store');
 Route::get('createorders', [OrderController::class, 'store'])->name('orders.store');
-Route::get('/showbyorder/{order_id}', [FileController::class, 'showByOrder'])->name('files.showByOrder');
 
 
-// Route::get('/downloadfile/{order_id}', [FileController::class, 'downloadFile'])->name('file.download'); //you need to put API on this one and make only the printer machine able to access it
+//bunt machine routes
 Route::middleware(['verify.printer.token'])->group(function () {
     Route::get('/downloadfile/{order_id}', [FileController::class, 'downloadFile'])->name('file.download');
+    Route::get('/showbyorder/{order_id}', [FileController::class, 'showByOrder'])->name('files.showByOrder');
 });

@@ -16,9 +16,9 @@ return new class extends Migration
             $table->string('file_name');
             $table->integer('PageCount')->nullable();
             $table->string('JobID');
-            $table->string('path')->nullable();  
+            $table->string('path')->nullable();
             $table->boolean('color_mode')->default(true);
-            $table->integer('price')->nullable();
+            $table->float('price')->nullable();
             $table->integer('copies');
             $table->string('order_id');
             $table->timestamps();

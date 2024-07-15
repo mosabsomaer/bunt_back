@@ -10,6 +10,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use ZipArchive;
 
 class FileController extends Controller
 {
@@ -68,15 +69,18 @@ class FileController extends Controller
                 'order_id' => ['required', 'string', 'min:6', 'max:6', 'exists:orders,order_id'],
 
             ]);
+            $orderId = $input['order_id'];
+            $fileCount = File::where('order_id', $orderId)->count();
 
-            // Make the GET request to the CloudConvert API
+            if ($fileCount >= 10) {
+                throw new \Exception("You can only upload 10 files for this order.");
+                $e='You can only upload 10 files for this order.';
+            }
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' .  env('CLOUDCONVERT_API_KEY'),
                 'Content-Type' => 'application/json',
             ])->get("https://api.cloudconvert.com/v2/jobs/" . $input['JobID']);
             $cloudConvertResponse = $response->json();
-
-            // Extract the download link from the response
             $downloadLink = null;
             $filename = null;
             $PageCount = null;
@@ -90,36 +94,31 @@ class FileController extends Controller
                     $PageCount = $task['result']['metadata']['PageCount'];
                 }
             }
-
-            // Download the file content
+            if (pathinfo($filename, PATHINFO_EXTENSION) !== 'pdf') {
+                throw new \Exception("Only PDF files are allowed.");
+            }
             $fileContent = Http::get($downloadLink)->body();
 
-            // Define the filename and store the file
             $filename = time() . '-' . $filename;
-
             $storagePath = 'files/' . $filename;
             Storage::put($storagePath, $fileContent);
 
-            // Add the file path to the input array
             $input['path'] = 'files/' . $filename;
             $input['file_name'] = $filename;
             $input['PageCount'] = $PageCount;
 
-            // Calculate the price
             $pricePerPage = $input['color_mode'] ? 1 : 0.5;
             $price = $pricePerPage * $input['PageCount'] * $input['copies'];
-            // Add the calculated price to the input array
             $input['price'] = $price;
-            //update number of pages in order table
             $order = Order::where('order_id', $input['order_id'])->first();
-            $order->number_pages += $PageCount;
+            $order->number_pages += $PageCount * $input['copies'];
             $order->save();
             // Create the file record in the database
             File::create($input);
             return response()->json([
-                'data' => 'created',
-                'downloadLink' => $downloadLink,
-                'api_response' => $cloudConvertResponse,
+                'data' => 'uploaded file on server',
+                'order_id' => $order->order_id
+
             ]);
         } catch (\Exception $e) {
             return $this->handleError($e);
@@ -146,6 +145,41 @@ class FileController extends Controller
 
 
 
+
+
+
+
+    public function showByOrder(string $id)
+    {
+        try {
+            $order = Order::where('order_id', $id)->first();
+            if (!$order) {
+                throw new \Exception("Order not found.");
+            }
+
+            $files = File::where('order_id', $order->order_id)->get();
+            if ($files->isEmpty()) {
+                throw new \Exception("No files found for the given Order.");
+            }
+
+
+
+
+
+
+            return response()->json([
+                'data' => $files,
+                'number_pages' => $order->number_pages
+            ]);
+        } catch (\Exception $e) {
+            return $this->handleError($e);
+        }
+    }
+
+
+
+
+
     /**
      * Update the specified resource in storage.
      */
@@ -154,31 +188,41 @@ class FileController extends Controller
         try {
             $file = File::findOrFail($id);
             $input = $request->validate([
-                'color_mode' => ['boolean'],
+                'color_mode' => ['nullable', 'boolean'],
                 'file_name' => ['string'],
                 'JobID' => ['string'],
-                'copies' => ['integer', 'min:1'],
+                'copies' => ['nullable', 'integer', 'min:1'],
                 'order_id' => ['string', 'min:6', 'max:6', 'exists:orders,order_id'],
-                'PageCount' => ['integer', 'min:1'],
+                'PageCount' => ['nullable', 'integer', 'min:1'],
                 'path' => ['string'],
             ]);
 
-            $pricePerPage = $input['color_mode'] ? 1 : 0.5;
-            $input['price']  = $pricePerPage * $input['PageCount'] * $input['copies'];
+            $colorMode = isset($input['color_mode']) ? $input['color_mode'] : $file->color_mode;
+            $pricePerPage = $colorMode ? 1 : 0.5;
+            $copies =  isset($input['copies'])?$input['copies']:$file->copies;
+            $pageCount = isset($input['PageCount']) ? $input['PageCount'] : $file->PageCount;
 
-            $order = Order::where('order_id', $input['order_id'])->first();
+            $input['price'] = $pricePerPage * $pageCount * $copies;
 
-            $order->number_pages += $input['PageCount'] - $file->PageCount;;
-            $order->save();
+            $order = Order::where('order_id', $input['order_id'])->firstOrFail();
+
+
+
+            $oldcount = $file->copies * $file->PageCount;
+
+            $newcount = $order->number_pages - $oldcount + $copies * $pageCount;
+
+            $order->update(['number_pages' => $newcount]);
             $file->update($input);
             return response()->json([
-                'data' => 'updated'
+                'data' => 'updated',
+                'file'=>$file,
+                'total number_pages for the order' => $order
             ]);
         } catch (\Exception $e) {
             return $this->handleError($e);
         }
     }
-
     /**
      * Remove the specified resource from storage.
      */
@@ -190,7 +234,7 @@ class FileController extends Controller
 
             $hello = Storage::delete($filepath);
             $order = Order::where('order_id', $file->order_id)->first();
-            $order->number_pages -= $file->PageCount;
+            $order->number_pages -= ($file->PageCount) * $file->copies;
             $order->save();
             $file->delete();
             return response()->json([
@@ -203,6 +247,8 @@ class FileController extends Controller
         }
     }
 
+
+
     public function downloadFile(string $id)
     {
         try {
@@ -212,36 +258,45 @@ class FileController extends Controller
                 throw new \Exception("Order not found.");
             }
 
-            // Find the File associated with the Order
-            $file = File::where('order_id', $order->order_id)->first();
-            if (!$file) {
-                throw new \Exception("File not found for the given Order.");
+            $files = File::where('order_id', $order->order_id)->get();
+            if ($files->isEmpty()) {
+                throw new \Exception("No files found for the given Order.");
             }
 
-            $filePath = storage_path('app/' . $file->path);
+            $totalPrice = $files->sum('price');
 
-            // Check if the file exists
-            if (!file_exists($filePath)) {
-                throw new \Exception("File not found at the specified path.");
+            $zipFileName = 'order_files_' . $order->order_id . '.zip';
+            $zipFilePath = storage_path('app/' . $zipFileName);
+
+            $zip = new ZipArchive;
+            if ($zip->open($zipFilePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === TRUE) {
+                foreach ($files as $file) {
+                    $filePath = storage_path('app/' . $file->path);
+                    if (file_exists($filePath)) {
+                        $relativeName = basename($filePath);
+                        $zip->addFile($filePath, $relativeName);
+                    } else {
+                        throw new \Exception("File not found at the specified path: " . $filePath);
+                    }
+                }
+                $zip->close();
+            } else {
+                throw new \Exception("Could not create zip file.");
             }
 
-            // Return the file for download
-            return response()->download($filePath);
+            $response = response()->download($zipFilePath)->deleteFileAfterSend(true);
+
+            $response->headers->set('total_price', $totalPrice);
+
+            return $response;
         } catch (\Exception $e) {
             $error = [
                 'error' => $e->getMessage(),
-                'code' => $e->getCode(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString(),
-                'path' => $filePath ?? null
+                'total_price' => isset($totalPrice) ? $totalPrice : 0
             ];
-
-            // Log the error for further investigation
             Log::error($e);
 
-            // Return the error response
-            return response()->json($error, 500);
+            return response()->json($error, 404);
         }
     }
 }

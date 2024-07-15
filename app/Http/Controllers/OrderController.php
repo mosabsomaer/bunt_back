@@ -2,12 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\File;
 use App\Models\Order;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
-
+use Illuminate\Support\Facades\Storage;
 class OrderController extends Controller
 {
 
@@ -117,15 +118,33 @@ class OrderController extends Controller
      * Remove the specified resource from storage.
      */
     public function destroy(string $id)
-    {
-        try {
-            $order = Order::where('order_id', $id)->first();
-            $order->delete();
-            return response()->json([
-                'data' => 'Order Deleted'
-            ]);
-        } catch (\Exception $e) {
-            return $this->handleError($e);
+{
+    try {
+        $order = Order::where('order_id', $id)->firstOrFail();
+        $files = File::where('order_id', $order->order_id)->get();
+
+        foreach ($files as $file) {
+            // Delete the file from storage
+            $filepath = $file->path;
+            Storage::delete($filepath);
+
+
+
+            $file->delete();
         }
+
+        // Save the updated number_pages (should be zero if all files are deleted)
+
+
+        // Finally, delete the order
+        $order->delete();
+
+        return response()->json([
+            'data' => 'Order and associated files deleted'
+        ]);
+    } catch (\Exception $e) {
+        return $this->handleError($e);
     }
+}
+
 }

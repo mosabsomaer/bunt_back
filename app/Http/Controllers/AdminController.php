@@ -1,7 +1,11 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use App\Models\Admin;
+use App\Models\Order;
+use App\Models\File;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Auth\AuthenticationException;
@@ -11,6 +15,7 @@ use Throwable;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+
 class AdminController extends Controller
 {
     /**
@@ -106,21 +111,27 @@ class AdminController extends Controller
     public function loginAdmin(Request $request)
     {
         try {
-            $validateAdmin = Validator::make($request->all(),
-            [
-                'username' => 'required',
-                'password' => 'required'
-            ]);
+            $validateAdmin = Validator::make(
+                $request->all(),
+                [
+                    'username' => 'required',
+                    'password' => 'required'
+                ]
+            );
 
-            if($validateAdmin->fails()){
+            if ($validateAdmin->fails()) {
+                $errors = '';
+                // Loop through errors and concatenate
+                foreach ($validateAdmin->errors()->all() as $error) {
+                    $errors .= $error . ' ';
+                }
                 return response()->json([
                     'status' => false,
-                    'message' => 'validation error',
-                    'errors' => $validateAdmin->errors()
+                    'message' =>  $errors
                 ], 401);
             }
 
-            if(!Auth::guard('admin')->attempt($request->only(['username', 'password']))){
+            if (!Auth::guard('admin')->attempt($request->only(['username', 'password']))) {
                 return response()->json([
                     'status' => false,
                     'message' => 'username & Password does not match with our record.',
@@ -134,7 +145,6 @@ class AdminController extends Controller
                 'message' => 'User Logged In Successfully',
                 'token' => $admin->createToken("API TOKEN")->plainTextToken
             ], 200);
-
         } catch (\Throwable $th) {
             return response()->json([
                 'status' => false,
@@ -175,8 +185,8 @@ class AdminController extends Controller
 
             return response()->json([
                 'data' => 'updated',
-                'input'=> $input,
-                'request'=>$request->request
+                'input' => $input,
+                'request' => $request->request
             ], 200);
         } catch (\Exception $e) {
             return $this->handleError($e);
@@ -198,4 +208,57 @@ class AdminController extends Controller
             return $this->handleError($e);
         }
     }
-}
+
+
+
+    public function statistics()
+    {
+        try {
+            $today = Carbon::today();
+            $startOfMonth = Carbon::now()->startOfMonth();
+            $endOfMonth = Carbon::now()->endOfMonth();
+
+            $totalTodayPrice = 0;
+            $totalMonthPrice = 0;
+            $totalPages = 0;
+
+            $todayOrders = Order::whereDate('updated_at', $today)
+                ->where('status', 'Completed')
+                ->get();
+
+
+            foreach ($todayOrders as $order) {
+                $files = File::where('order_id', $order->order_id)->get();
+                $totalTodayPrice += $files->sum('price');
+            }
+
+
+
+            $monthOrders = Order::whereBetween('updated_at', [$startOfMonth, $endOfMonth])
+                ->where('status', 'Completed')
+                ->get();
+
+            $countorders = count($monthOrders);
+
+            foreach ($monthOrders as $order) {
+                $files = File::where('order_id', $order->order_id)->get();
+                $totalMonthPrice += $files->sum('price');
+                $totalPages += $order->number_pages;
+            }
+            $averagePages = $countorders > 0 ? floor($totalPages / $countorders) : 0;
+
+            return response()->json([
+                'Today_sales' => $totalTodayPrice,
+                'Monthly_sales' => $totalMonthPrice,
+                'count_orders' => $countorders,
+                'Average_pages_per_order' => $averagePages,
+                'message' => 'Statistics fetched successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'An error occurred while fetching statistics',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+};

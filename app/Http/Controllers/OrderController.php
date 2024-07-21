@@ -102,12 +102,24 @@ class OrderController extends Controller
             $validStatus = ['Completed', 'Pending', 'Canceled'];
             $order = Order::where('order_id', $id)->first();
             $input = $request->validate([
-                'status' => ['string', Rule::in($validStatus)],
+                'status' => ['required','string', Rule::in($validStatus)],
                 'number_pages' => ['integer'],
             ]);
+            // if($input['status']=='Completed'){
+            //     $files = File::where('order_id', $id)->get();
+                                                                    //put this back when your done as it will delete all the files once the files have been printed and it wont delete the file in the table 
+            //     foreach ($files as $file) {
+            //         // Delete the file from storage
+            //         $filepath = $file->path;
+            //         Storage::delete($filepath);
+            //     }
+
+            // }
             $order->update($input);
             return response()->json([
                 'data' => 'updated'
+
+
             ]);
         } catch (\Exception $e) {
             return $this->handleError($e);
@@ -133,7 +145,6 @@ class OrderController extends Controller
             $file->delete();
         }
 
-        // Save the updated number_pages (should be zero if all files are deleted)
 
 
         // Finally, delete the order

@@ -9,6 +9,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Storage;
+
 class OrderController extends Controller
 {
 
@@ -44,6 +45,17 @@ class OrderController extends Controller
     {
         try {
             $order = Order::all();
+
+            foreach ($order as $ord) {
+                $files = File::where('order_id', $ord->order_id)->get();
+                if ($files->isEmpty()) {
+                    throw new \Exception("No files found for the given Order.");
+                }
+
+                $ord['price'] = $files->sum('price');
+                $ord['files']=count($files);
+            }
+
             return response()->json([
                 'data' => $order
             ]);
@@ -102,12 +114,12 @@ class OrderController extends Controller
             $validStatus = ['Completed', 'Pending', 'Canceled'];
             $order = Order::where('order_id', $id)->first();
             $input = $request->validate([
-                'status' => ['required','string', Rule::in($validStatus)],
+                'status' => ['required', 'string', Rule::in($validStatus)],
                 'number_pages' => ['integer'],
             ]);
             // if($input['status']=='Completed'){
             //     $files = File::where('order_id', $id)->get();
-                                                                    //put this back when your done as it will delete all the files once the files have been printed and it wont delete the file in the table 
+            //put this back when your done as it will delete all the files once the files have been printed and it wont delete the file in the table
             //     foreach ($files as $file) {
             //         // Delete the file from storage
             //         $filepath = $file->path;
@@ -130,32 +142,29 @@ class OrderController extends Controller
      * Remove the specified resource from storage.
      */
     public function destroy(string $id)
-{
-    try {
-        $order = Order::where('order_id', $id)->firstOrFail();
-        $files = File::where('order_id', $order->order_id)->get();
+    {
+        try {
+            $order = Order::where('order_id', $id)->firstOrFail();
+            $files = File::where('order_id', $order->order_id)->get();
 
-        foreach ($files as $file) {
-            // Delete the file from storage
-            $filepath = $file->path;
-            Storage::delete($filepath);
+            foreach ($files as $file) {
+                // Delete the file from storage
+                $filepath = $file->path;
+                Storage::delete($filepath);
+
+                $file->delete();
+            }
 
 
 
-            $file->delete();
+            // Finally, delete the order
+            $order->delete();
+
+            return response()->json([
+                'data' => 'Order and associated files deleted'
+            ]);
+        } catch (\Exception $e) {
+            return $this->handleError($e);
         }
-
-
-
-        // Finally, delete the order
-        $order->delete();
-
-        return response()->json([
-            'data' => 'Order and associated files deleted'
-        ]);
-    } catch (\Exception $e) {
-        return $this->handleError($e);
     }
-}
-
 }

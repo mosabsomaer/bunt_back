@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\File;
 use App\Models\Order;
+use App\Models\Machine;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -53,7 +54,7 @@ class OrderController extends Controller
                 }
 
                 $ord['price'] = $files->sum('price');
-                $ord['files']=count($files);
+                $ord['files'] = count($files);
             }
 
             return response()->json([
@@ -95,6 +96,7 @@ class OrderController extends Controller
     {
         try {
             $order = Order::where('order_id', $id)->first();
+
             return response()->json([
                 'data' => $order
             ]);
@@ -117,16 +119,25 @@ class OrderController extends Controller
                 'status' => ['required', 'string', Rule::in($validStatus)],
                 'number_pages' => ['integer'],
             ]);
-            // if($input['status']=='Completed'){
-            //     $files = File::where('order_id', $id)->get();
-            //put this back when your done as it will delete all the files once the files have been printed and it wont delete the file in the table
-            //     foreach ($files as $file) {
-            //         // Delete the file from storage
-            //         $filepath = $file->path;
-            //         Storage::delete($filepath);
-            //     }
+            if ($input['status'] == 'Completed') {
 
-            // }
+                    $files = File::where('order_id', $id)->get();
+                // put this back when your done as it will delete all the files once the files have been printed and it wont delete the file in the table
+                //     foreach ($files as $file) {
+                //         // Delete the file from storage
+                //         $filepath = $file->path;
+                //         Storage::delete($filepath);
+                //     }
+               $price = $files->sum('price');
+                $machine = Machine::findOrFail(2);
+                $inputm=[];
+                $inputm['paper']=$machine->paper-$order->number_pages;
+                $inputm['coins']=$machine->coins+$price;
+                $jj=$order->number_pages;
+                $kk=$jj*100/1000;
+                $inputm['ink']=$machine->ink-$kk;
+                $machine->update($inputm);
+            }
             $order->update($input);
             return response()->json([
                 'data' => 'updated'

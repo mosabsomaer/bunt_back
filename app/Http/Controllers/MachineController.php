@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Machine;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Carbon\Carbon;
 
 class MachineController extends Controller
 {
@@ -80,27 +81,30 @@ class MachineController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        try{
-        $validStatus = ['Active', 'Lost Connection', 'Resource Alert'];
-        $machine = Machine::findOrFail($id);
-        $input = $request->validate([
-            'name' => ['string'],
-            'paper' => ['integer'],
-            'coins' => ['integer'],
-            'ink' => ['integer'],
-            'status' => ['string', Rule::in($validStatus)],
-        ]);
-        $machine->update($input);
-        return response()->json([
-            'data' => 'updated'
+        try {
+            $validStatus = ['Active', 'Lost Connection', 'Resource Alert'];
+            $machine = Machine::findOrFail($id);
+            $input = $request->validate([
+                'name' => ['string'],
+                'paper' => ['integer'],
+                'coins' => ['integer'],
+                'ink' => ['integer'],
+                'status' => ['string', Rule::in($validStatus)],
+            ]);
+            $input['last_ping'] = Carbon::now()->format('Y-m-d H:i:s');
+
+            $machine->update($input);
+            return response()->json([
+                'data' => 'updated',
+                'input' => $input,
 
 
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'error' => 'failed to update machine'
-        ], 404);
-    }
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'failed to update machine'
+            ], 404);
+        }
     }
 
     /**

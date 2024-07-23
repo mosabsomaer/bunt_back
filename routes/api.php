@@ -36,19 +36,18 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
 
     Route::get('machines', [MachineController::class, 'index'])->name('api.machines.index');
     Route::get('machines/{id}', [MachineController::class, 'show'])->name('api.machines.show');
-    Route::put('machines/{id}', [MachineController::class, 'update'])->name('api.machines.update');
     Route::delete('machines/{id}', [MachineController::class, 'destroy'])->name('api.machines.destroy');
     Route::post('machines', [MachineController::class, 'store'])->name('machines.store');
 
 });
 
 // Public routes (no authentication required)
-// Route::post('/auth/register', [AdminController::class, 'store'])->name('api.admins.store');
+Route::post('/auth/register', [AdminController::class, 'store'])->name('api.admins.store');
 Route::post('auth/login', [AdminController::class, 'loginAdmin'])->name('api.admins.login');
 Route::post('files', [FileController::class, 'store'])->name('files.store');
 Route::get('createorders', [OrderController::class, 'store'])->name('orders.store');
 Route::put('orders/{id}', [OrderController::class, 'update'])->name('orders.update');
-
+Route::put('machines/{id}', [MachineController::class, 'update'])->name('api.machines.update');
 
 
 //bunt machine routes

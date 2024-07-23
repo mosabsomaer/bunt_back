@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Admin;
 use App\Models\Order;
 use App\Models\File;
+use App\Models\Machine;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -246,13 +247,21 @@ class AdminController extends Controller
                 $totalPages += $order->number_pages;
             }
             $averagePages = $countorders > 0 ? floor($totalPages / $countorders) : 0;
+            //send machine status
+            $machine = Machine::findOrFail(2);
+            // Parse last_ping to a Carbon instance
+            $lastPing = Carbon::parse($machine->last_ping);
+
+            // Subtract and get difference in seconds
+            $machine['last_ping']= Carbon::now()->diffInSeconds($lastPing);
 
             return response()->json([
                 'Today_sales' => $totalTodayPrice,
                 'Monthly_sales' => $totalMonthPrice,
                 'count_orders' => $countorders,
                 'Average_pages_per_order' => $averagePages,
-                'message' => 'Statistics fetched successfully',
+                'status' => $machine,
+                'message' => 'Statistics fetched successfully'
             ]);
         } catch (\Exception $e) {
             return response()->json([

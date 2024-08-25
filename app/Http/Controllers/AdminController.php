@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Admin;
 use App\Models\Order;
 use App\Models\File;
+use Illuminate\Support\Facades\DB;
 use App\Models\Machine;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -122,7 +123,6 @@ class AdminController extends Controller
 
             if ($validateAdmin->fails()) {
                 $errors = '';
-                // Loop through errors and concatenate
                 foreach ($validateAdmin->errors()->all() as $error) {
                     $errors .= $error . ' ';
                 }
@@ -153,6 +153,43 @@ class AdminController extends Controller
             ], 500);
         }
     }
+
+
+
+    public function logoutadmin(Request $request)
+    {
+        try {
+            $token = $request->input('token');
+            $tokenWithoutId = substr($token, strpos($token, '|') + 1);
+            $deletedRows = DB::table('personal_access_tokens')
+                ->where('token', hash('sha256', $tokenWithoutId))
+                ->delete();
+
+            if ($deletedRows > 0) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'logged out successfully',
+                    'token' => $tokenWithoutId
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'error logging out',
+                    'token' => $tokenWithoutId
+                ], 401);
+            }
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'error logging out',
+                'error' => $e->getMessage(),
+                'token' => $tokenWithoutId
+            ], 500);
+        }
+    }
+
+
 
     /**
      * Display the specified resource.
@@ -247,12 +284,9 @@ class AdminController extends Controller
                 $totalPages += $order->number_pages;
             }
             $averagePages = $countorders > 0 ? floor($totalPages / $countorders) : 0;
-            //send machine status
             $machine = Machine::findOrFail(2);
-            // Parse last_ping to a Carbon instance
             $lastPing = Carbon::parse($machine->last_ping);
 
-            // Subtract and get difference in seconds
             $machine['last_ping']= Carbon::now()->diffInSeconds($lastPing);
 
             return response()->json([

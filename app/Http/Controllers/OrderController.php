@@ -50,11 +50,12 @@ class OrderController extends Controller
             foreach ($order as $ord) {
                 $files = File::where('order_id', $ord->order_id)->get();
                 if ($files->isEmpty()) {
-                    throw new \Exception("No files found for the given Order.");
+                    $e='No files found for the given Order.';
                 }
-
-                $ord['price'] = $files->sum('price');
-                $ord['files'] = count($files);
+                else {
+                    $ord['price'] = $files->sum('price');
+                    $ord['files'] = count($files);
+                }
             }
 
             return response()->json([
@@ -121,21 +122,21 @@ class OrderController extends Controller
             ]);
             if ($input['status'] == 'Completed') {
 
-                    $files = File::where('order_id', $id)->get();
+                $files = File::where('order_id', $id)->get();
                 // put this back when your done as it will delete all the files once the files have been printed and it wont delete the file in the table
-                //     foreach ($files as $file) {
-                //         // Delete the file from storage
-                //         $filepath = $file->path;
-                //         Storage::delete($filepath);
-                //     }
-               $price = $files->sum('price');
+                    foreach ($files as $file) {
+                        // Delete the file from storage
+                        $filepath = $file->path;
+                        Storage::delete($filepath);
+                    }
+                $price = $files->sum('price');
                 $machine = Machine::findOrFail(2);
-                $inputm=[];
-                $inputm['paper']=$machine->paper-$order->number_pages;
-                $inputm['coins']=$machine->coins+$price;
-                $jj=$order->number_pages;
-                $kk=$jj*100/1000;
-                $inputm['ink']=$machine->ink-$kk;
+                $inputm = [];
+                $inputm['paper'] = $machine->paper - $order->number_pages;
+                $inputm['coins'] = $machine->coins + $price;
+                $jj = $order->number_pages;
+                $kk = $jj * 100 / 2000;
+                $inputm['ink'] = $machine->ink - $kk;
                 $machine->update($inputm);
             }
             $order->update($input);
@@ -159,7 +160,6 @@ class OrderController extends Controller
             $files = File::where('order_id', $order->order_id)->get();
 
             foreach ($files as $file) {
-                // Delete the file from storage
                 $filepath = $file->path;
                 Storage::delete($filepath);
 
@@ -168,7 +168,6 @@ class OrderController extends Controller
 
 
 
-            // Finally, delete the order
             $order->delete();
 
             return response()->json([

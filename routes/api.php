@@ -28,6 +28,9 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::put('admins/{id}', [AdminController::class, 'update'])->name('api.admins.update');
     Route::delete('admins/{id}', [AdminController::class, 'destroy'])->name('api.admins.destroy');
     Route::get('statistics', [AdminController::class, 'statistics'])->name('api.admins.statistics');
+    Route::post('admins/logout', [AdminController::class, 'logoutadmin'])->name('api.admins.logoutadmin');
+
+
 
     Route::get('files', [FileController::class, 'index'])->name('files.index');
     Route::get('files/{id}', [FileController::class, 'show'])->name('files.show');

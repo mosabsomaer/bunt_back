@@ -113,7 +113,6 @@ class FileController extends Controller
             $order = Order::where('order_id', $input['order_id'])->first();
             $order->number_pages += $PageCount * $input['copies'];
             $order->save();
-            // Create the file record in the database
             File::create($input);
             return response()->json([
                 'data' => 'uploaded file on server',
@@ -252,7 +251,6 @@ class FileController extends Controller
     public function downloadFile(string $id)
     {
         try {
-            // Find the Order using order_id
             $order = Order::where('order_id', $id)->first();
             if (!$order) {
                 throw new \Exception("Order not found.");

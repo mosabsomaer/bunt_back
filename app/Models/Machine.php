@@ -22,13 +22,12 @@ class Machine extends Model
     protected static function boot()
     {
         parent::boot();
+
         static::retrieved(function (Machine $machine) {
-            // now $machine will definitely be a model instance
             if (Carbon::parse($machine->last_ping)->diffInMinutes(Carbon::now()) > 1) {
                 $machine->status = 'Lost Connection';
-            }
-            else{
-                $machine->status = 'Active';
+            } else {
+                $machine->status = ($machine->paper < 250 || $machine->ink < 25 || $machine->coins >= 400) ? 'Resource Alert' : 'Active';
             }
         });
     }

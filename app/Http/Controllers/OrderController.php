@@ -2,88 +2,49 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\File;
 use App\Models\Order;
-use App\Models\Machine;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use App\Services\OrderService;
+use App\Http\Resources\OrderResource;
+use App\Http\Resources\OrderListResource;
+use App\Http\Requests\Order\StoreOrderRequest;
+use App\Http\Requests\Order\UpdateOrderRequest;
+use App\Http\Requests\Order\UpdateOrderStatusRequest;
+use App\Types\OrderStatusEnum;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\JsonResponse;
 
 class OrderController extends Controller
 {
+    public function __construct(
+        protected OrderService $orderService
+    ) {}
 
-
-    /**
-     * Handle the error response.
-     *
-     * @param \Exception $e
-     * @param int $statusCode
-     * @return \Illuminate\Http\JsonResponse
-     */
-    protected function handleError(\Exception $e, $statusCode = 500)
-    {
-        if ($e instanceof ModelNotFoundException) {
-            $statusCode = 404;
-            $error = 'Order not found.';
-        } elseif ($e instanceof ValidationException) {
-            $statusCode = 422;
-            $error = $e->errors();
-        } else {
-            $error = 'An error occurred.';
-        }
-
-        return response()->json([
-            'error' => $error
-        ], $statusCode);
-    }
     /**
      * Display a listing of the resource.
      */
-
-    public function index()
+    public function index(): JsonResponse
     {
-        try {
-            $order = Order::all();
-
-            foreach ($order as $ord) {
-                $files = File::where('order_id', $ord->order_id)->get();
-                if ($files->isEmpty()) {
-                    $e='No files found for the given Order.';
-                }
-                else {
-                    $ord['price'] = $files->sum('price');
-                    $ord['files'] = count($files);
-                }
-            }
-
-            return response()->json([
-                'data' => $order
-            ]);
-        } catch (\Exception $e) {
-            return $this->handleError($e);
-        }
+        $orders = $this->orderService->getOrders();
+        
+        return response()->json([
+            'status' => 'success',
+            'data' => OrderListResource::collection($orders)
+        ]);
     }
 
     /**
      * Store a newly created resource in storage.
      */
-    public function store()
+    public function store(StoreOrderRequest $request): JsonResponse
     {
         try {
-
-            $input = null;
-            $input['status'] = 'Pending';
-
-            $order = Order::create($input);
+            $order = $this->orderService->createOrder();
+            
             return response()->json([
                 'status' => 'success',
                 'message' => 'Order created successfully',
-                'data' => [
-                    'order_id' => $order->order_id,
-                    'status' => $order->status,
-                ]
+                'data' => new OrderListResource($order)
             ], 201);
         } catch (\Exception $e) {
             return $this->handleError($e);
@@ -93,57 +54,60 @@ class OrderController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show(String $id): JsonResponse
     {
-        try {
-            $order = Order::where('order_id', $id)->first();
+        $order = $this->orderService->getOrderByOrderId($id);
+        return response()->json([
+            'status' => 'success',
+            'data' => new OrderResource($order)
+        ]);
+    }
 
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(UpdateOrderRequest $request, String $id): JsonResponse
+    {
+        $order = $this->orderService->getOrderByOrderId($id);
+        try {
+            $order = $this->orderService->updateOrder($order, $request->validated());
+            
             return response()->json([
-                'data' => $order
+                'status' => 'success',
+                'message' => 'Order updated successfully',
+                'data' => new OrderListResource($order)
             ]);
         } catch (\Exception $e) {
             return $this->handleError($e);
         }
     }
 
-
-
     /**
-     * Update the specified resource in storage.
+     * Update the specified resource status in storage.
      */
-    public function update(Request $request, string $id)
+    public function updateStatus(UpdateOrderStatusRequest $request, string $id)
     {
         try {
-            $validStatus = ['Completed', 'Pending', 'Canceled'];
-            $order = Order::where('order_id', $id)->first();
-            $input = $request->validate([
-                'status' => ['required', 'string', Rule::in($validStatus)],
-                'number_pages' => ['integer'],
-            ]);
-            if ($input['status'] == 'Completed') {
-
-                $files = File::where('order_id', $id)->get();
-                // put this back when your done as it will delete all the files once the files have been printed and it wont delete the file in the table
-                    foreach ($files as $file) {
-                        // Delete the file from storage
-                        $filepath = $file->path;
-                        Storage::delete($filepath);
-                    }
-                $price = $files->sum('price');
-                $machine = Machine::findOrFail(2);
-                $inputm = [];
-                $inputm['paper'] = $machine->paper - $order->number_pages;
-                $inputm['coins'] = $machine->coins + $price;
-                $jj = $order->number_pages;
-                $kk = $jj * 100 / 2000;
-                $inputm['ink'] = $machine->ink - $kk;
-                $machine->update($inputm);
+            $order = $this->orderService->getOrderByOrderId($id);
+            $statusString = $request->validated('status');
+            
+            try {
+                $status = OrderStatusEnum::from($statusString);
+            } catch (\ValueError $e) {
+                // Get allowed values from the enum
+                $allowedValues = implode(', ', OrderStatusEnum::values());
+                
+                return response()->json([
+                    'status' => 'error',
+                    'message' => "Invalid status value. Allowed values are: $allowedValues"
+                ], 422);
             }
-            $order->update($input);
+
+            $order = $this->orderService->updateOrderStatus($order, $status);
             return response()->json([
-                'data' => 'updated'
-
-
+                'status' => 'success',
+                'message' => 'Order status updated successfully',
+                'data' => new OrderResource($order)
             ]);
         } catch (\Exception $e) {
             return $this->handleError($e);
@@ -153,28 +117,36 @@ class OrderController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(string $id)
+    public function destroy(String $id): JsonResponse
     {
         try {
-            $order = Order::where('order_id', $id)->firstOrFail();
-            $files = File::where('order_id', $order->order_id)->get();
-
-            foreach ($files as $file) {
-                $filepath = $file->path;
-                Storage::delete($filepath);
-
-                $file->delete();
-            }
-
-
-
-            $order->delete();
-
+            $order = $this->orderService->getOrderByOrderId($id);
+            $this->authorize('delete', $order);
+            
+            $this->orderService->deleteOrder($order);
             return response()->json([
-                'data' => 'Order and associated files deleted'
+                'status' => 'success',
+                'message' => 'Order deleted successfully'
             ]);
         } catch (\Exception $e) {
             return $this->handleError($e);
         }
+    }
+
+    protected function handleError(\Exception $e, $statusCode = 500): JsonResponse
+    {
+        if ($e instanceof ModelNotFoundException) {
+            $statusCode = 404;
+            $error = 'Order not found.';
+        } elseif ($e instanceof ValidationException) {
+            $statusCode = 422;
+            $error = $e->errors();
+        } else {
+            $error = $e;
+        }
+
+        return response()->json([
+            'error' => $error
+        ], $statusCode);
     }
 }

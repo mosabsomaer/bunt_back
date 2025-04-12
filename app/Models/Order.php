@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Types\OrderStatusEnum;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -11,6 +12,10 @@ class Order extends Model
     protected $fillable = [
         'status',
         'number_pages'
+    ];
+
+    protected $casts = [
+        'status' => OrderStatusEnum::class
     ];
 
     public function file()

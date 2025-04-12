@@ -12,6 +12,26 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         //
+
+		$this->app->bind(
+			\App\Interfaces\TestServiceInterface::class,
+			\App\Services\TestService::class
+		);
+
+		$this->app->bind(
+			\App\Interfaces\OrderServiceInterface::class,
+			\App\Services\OrderService::class
+		);
+
+		$this->app->bind(
+			\App\Interfaces\FileServiceInterface::class,
+			\App\Services\FileService::class
+		);
+
+		$this->app->bind(
+			\App\Interfaces\MachineServiceInterface::class,
+			\App\Services\MachineService::class
+		);
     }
 
     /**

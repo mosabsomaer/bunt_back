@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use App\Types\MachineStatusEnum;
 use Carbon\Carbon;
 
 return new class extends Migration
@@ -19,7 +20,7 @@ return new class extends Migration
             $table->integer('paper')->default(0);
             $table->float('coins')->default(0);
             $table->integer('ink')->default(0);
-            $table->enum('status', ['Active', 'Lost Connection', 'Resource Alert'])->default('Lost Connection');
+            $table->enum('status', MachineStatusEnum::values())->default(MachineStatusEnum::LOST_CONNECTION->value);
             $table->timestamp('last_ping')->default(Carbon::now()->format('Y-m-d H:i:s'));
             $table->timestamps();
         });
